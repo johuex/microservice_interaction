@@ -1,4 +1,4 @@
-# Syntetic microservice interaction
+# Synthetic microservice interaction
 
 ## Used interation types:
 * API call via http
