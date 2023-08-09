@@ -1,0 +1,9 @@
+go 1.20
+
+use (
+	./src/api_service
+	./src/kafka_service
+	./src/master_service
+	./src/proto
+	./src/rpc_service
+)

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package rpc_compiled;
+
+option go_package = "./rpc_compiled";
+
+service ExampleService {
+    rpc Call(Request) returns (Response) {}
+}
+
+message Request {
+    int32 message = 1;
+}
+
+message Response {
+    int32 message = 1;
+}

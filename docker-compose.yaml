@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2888
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: nc -z localhost 2888 || exit -1
+      start_period: 15s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    hostname: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2888
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    healthcheck:
+      test: nc -z localhost 29092 || exit -1
+      interval: 5s
+      timeout: 10s
+      retries: 19
+      start_period: 15s # check without counting retries
+    
+  init-kafka:
+    # init topic after kafka creating
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      kafka-topics --bootstrap-server kafka:29092 --list
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic example_topic --replication-factor 1 --partitions 1
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka:29092 --list
+      "  
+  
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - 8090:8080
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2888
+    depends_on:
+      init-kafka:
+          condition: service_completed_successfully 
+    links:
+      - kafka
+      - zookeeper
+
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      init-kafka:
+        condition: service_completed_successfully
+    env_file:
+      - ./.env
+    volumes:
+      - ./build/master_service:/app
+      - ./.env:/app
+    ports:
+      - "3000:3000"
+      
+  rpc_slave:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      master:
+        condition: service_started
+    env_file:
+      - ./.env
+    volumes:
+      - ./build/rpc_service:/app
+
+  kafka_slave:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      master:
+        condition: service_started
+    env_file:
+      - ./.env
+    volumes:
+      - ./build/kafka_service:/app
+
+  api_slave:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      master:
+        condition: service_started
+    env_file:
+      - ./.env
+    volumes:
+      - ./build/api_service:/app
